@@ -18,7 +18,7 @@ Then import into your project:
 
 | Function | Arguments | Promise Resolve |
 |----------|-----------|----------------|
-| `videoInfo(url)` | `url`, the URL of a YouTube video | Returns a video data object (read below) |
+| `videoInfo(url, minimalChannelInfo)` | `url`, the URL of a YouTube video, `minimalChannelInfo`, will ensure only a request to the video page is made instead of the default video and channel page scrape | Returns a video data object (read below) |
 | `channelInfo(url)` | `url`, the URL of a YouTube channel page | Returns a channel data object (read below) |
 
 #### Example
@@ -58,3 +58,5 @@ Then import into your project:
 | joined | JS `Date` object to channel creation date |
 | url | URL of the channel |
 | description | Channel description |
+
+**NOTE:** If `minimalChannelInfo` is enabled within `videoInfo(url, minimalChannelInfo)` then only `id`, `name` and `url` will be returned in the channel object.

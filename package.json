@@ -1,13 +1,28 @@
 {
   "name": "yt-scraper",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Modern YouTube scraper capable of retrieving video and channel info",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [
+    "youtube",
+    "scraper",
+    "video",
+    "channel",
+    "modern",
+    "updated"
+  ],
   "author": "Harry Stanton",
   "license": "Unlicense",
+  "bugs": {
+    "url": "https://github.com/harrego/yt-scraper/issues/new"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/harrego/yt-scraper.git"
+  },
   "dependencies": {
     "cheerio": "^1.0.0-rc.2",
     "request": "^2.87.0",

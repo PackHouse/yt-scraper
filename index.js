@@ -71,7 +71,7 @@ function channelInfo(channelUrl) {
 
 exports.channelInfo = channelInfo
 
-function videoInfo(videoUrl) {
+function videoInfo(videoUrl, minimalChannelInfo) {
   return new Promise((resolve, reject) => {
     // Parse the given url for processing
     var parsedUrl = url.parse(videoUrl)
@@ -119,10 +119,11 @@ function videoInfo(videoUrl) {
 
           var uploadDate = $("#watch-uploader-info .watch-time-text").text().replace("Published on", "").trim()
 
-          var author = $(".yt-user-info a").text()
+          var channel = $(".yt-user-info a").text()
 
-          var authorUrl = $(".yt-user-info a").attr("href")
-          authorUrl = "https://www.youtube.com" + authorUrl
+          var channelUrl = $(".yt-user-info a").attr("href")
+          var channelId = channelUrl.replace(/\/(user|channel)\//g, "")
+          channelUrl = "https://www.youtube.com" + channelUrl
 
           // Final construction of data
           var data = {
@@ -135,25 +136,29 @@ function videoInfo(videoUrl) {
             uploadDate: new Date(uploadDate)
           }
 
-          // Pull channel info to add the data object
-          channelInfo(authorUrl)
-          .then(channelData => {
-            // Add all channel info to data object
-            data.channel = channelData
-            // Return data
+          if (!minimalChannelInfo) {
+            // Pull channel info to add the data object
+            channelInfo(channelUrl)
+            .then(channelData => {
+              // Add all channel info to data object
+              data.channel = channelData
+              // Return data
+              resolve(data)
+            })
+            .catch(reject)
+          } else {
+            data.channel = {
+              id: channelId,
+              name: channel,
+              url: channelUrl
+            }
             resolve(data)
-          })
-          .catch(reject)
+          }
         })
         .catch(reject)
       } else reject("Invalid video ID")
     } else reject("Invalid video URL")
   })
 }
-
-videoInfo("https://www.youtube.com/watch?v=dd_FBkfkcaM")
-.then(data => {
-  console.log(data)
-})
 
 exports.videoInfo = videoInfo
