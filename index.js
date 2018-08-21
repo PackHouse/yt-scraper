@@ -10,7 +10,8 @@ function channelInfo(channelUrl) {
     // Parse url for processing
     var parsedUrl = url.parse(channelUrl)
     // Regex for checking a valid channel id
-    var channelPathRegex = /^\/(user|channel)\/[A-Za-z1-9-]{1,}$/g
+    // youtube channel id should contains 0 & _ character.
+    var channelPathRegex = /^\/(user|channel)\/[_A-Za-z0-9-]{1,}$/g
 
     // Checking the type of channel url, `channel` or `url`
     var channelUrlType = "channel"
