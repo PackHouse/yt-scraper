@@ -60,3 +60,15 @@ Then import into your project:
 | description | Channel description |
 
 **NOTE:** If `minimalChannelInfo` is enabled within `videoInfo(url, minimalChannelInfo)` then only `id`, `name` and `url` will be returned in the channel object.
+
+## Testing / Coverage
+
+[jest](https://jestjs.io) is currently used to perform coverage and unit tests. Tests can be performed using `npm test`, coverage tests can be performed using `npm coverage`.
+
+## Contributing 
+
+We heavily value contributions, if you would like to contribute please feel free put in a pull request.
+
+### Contributors
+
+* Big thanks to [elBarkey](https://github.com/elBarkey) for bug fixes and stability contributions.
