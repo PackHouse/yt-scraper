@@ -27,7 +27,11 @@ function channelInfo(channelUrl) {
 
         // Generate a fresh/clean channel url
         var generatedChannelUrl = "https://www.youtube.com/" + channelUrlType + "/" + channelId + "/about"
-        request(generatedChannelUrl)
+        request(generatedChannelUrl,{
+          headers: {
+            'accept-language': 'en-US;q=1.0,en;q=0.9'
+          }
+        })
         .then(body => {
           var $ = cheerio.load(body)
 
@@ -100,7 +104,11 @@ function videoInfo(videoUrl, minimalChannelInfo) {
         // Generate a fresh/clean url
         var generatedVideoUrl = "https://www.youtube.com/watch?v=" + videoId
         // Pull the source code
-        request(generatedVideoUrl)
+        request(generatedVideoUrl,{
+          headers: {
+            'accept-language': 'en-US;q=1.0,en;q=0.9'
+          }
+        })
         .then(body => {
           // Load into cheerio
           var $ = cheerio.load(body)
