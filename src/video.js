@@ -3,97 +3,189 @@ const cheerio = require("cheerio")
 const request = require("request-promise-native")
 
 const globalVariables = require("./variables")
+const errors = require("./errors")
 const channel = require("./channel")
 
-function videoInfo(videoUrl, minimalChannelInfo) {
+function videoInfo(videoUrl, options = {}) {
   return new Promise((resolve, reject) => {
-    // Parse the given url for processing
-    var parsedUrl = url.parse(videoUrl)
+    const videoIdRegex = /^[0-9A-Za-z_-]{10,}[048AEIMQUYcgkosw]$/g
+    let videoId
 
-    // Regex for video id used a little later, 10+ characters for future proofing
-    var videoIdRegex = /^[0-9A-Za-z_-]{10,}[048AEIMQUYcgkosw]$/g
-    if (globalVariables.hostnameRegex.test(parsedUrl.hostname)) {
-      // Start a loop to find the "v" query and value
-      var videoId = undefined
-      // Split the queries and loop through them
-      parsedUrl.query.split("&").forEach(query => {
-        // Split each query key and value
-        var splitQuery = query.split("=")
-        // If the key is "v"...
-        if (splitQuery[0] == "v") {
-          // Verify it's a valid id
-          if (videoIdRegex.test(splitQuery[1])) {
-            videoId = splitQuery[1]
+    if (videoIdRegex.test(videoUrl)) {
+      videoId = videoUrl
+    } else {
+      const httpRegex = /^(http|https):\/\//g
+      if (!httpRegex.test(videoUrl)) {
+        videoUrl = "https://" + videoUrl
+      }
+
+      const parsedUrl = url.parse(videoUrl)
+      // if (!/^((www.)?youtube.com|youtu.be)$/g.test(parsedUrl.hostname)) {
+      //   reject(new errors.YTScraperInvalidVideoURL)
+      //   return
+      // }
+
+      if (/^(www.)?youtube.com/g.test(parsedUrl.hostname)) {
+        const urlQueries = {}
+        parsedUrl.query.split("&").forEach(query => {
+          const split = query.split("=")
+          urlQueries[split[0]] = split[1]
+        })
+
+        if (!urlQueries.v) {
+          reject(new errors.YTScraperInvalidVideoURL)
+          return
+        }
+
+        if (!videoIdRegex.test(urlQueries.v)) {
+          reject(new errors.YTScraperInvalidVideoID)
+          return
+        }
+
+        videoId = urlQueries.v
+      } else if (/^youtu.be/g.test(parsedUrl.hostname)) {
+        const pathnameId = parsedUrl.pathname.slice(1,)
+
+        if (pathnameId.length <= 0) {
+          reject(new errors.YTScraperInvalidVideoURL)
+          return
+        }
+
+        if (!videoIdRegex.test(pathnameId)) {
+          reject(new errors.YTScraperInvalidVideoID)
+          return
+        }
+
+        videoId = pathnameId
+      } else {
+        reject(new errors.YTScraperInvalidVideoURL)
+        return
+      }
+    }
+
+    const ytUrl = `https://www.youtube.com/watch?v=${videoId}&gl=US&hl=en&has_verified=1&bpctr=9999999999`
+    request({
+      url: ytUrl,
+      headers: globalVariables.globalHeaders
+    }, (err, res, body) => {
+      if (err) {
+        reject(err)
+        return
+      }
+
+      if (!body) {
+        reject(new errors.YTScraperMissingData)
+        return
+      }
+
+      const $ = cheerio(body)
+      let playerResponse
+      const scriptElements = $.find("script").toArray()
+      for (index in scriptElements) {
+        const element = scriptElements[index]
+        const text = cheerio(element).contents().first().text()
+        const configMatches = text.match(/ytplayer.config\s?=\s?\{.{0,}\};ytplayer/gm)
+        for (configMatchIndex in configMatches) {
+          const configMatch = configMatches[configMatchIndex]
+
+          const finalMatches = configMatch.match(/\{.{0,}\}/gm)
+          for (finalMatchIndex in finalMatches) {
+            const finalMatch = finalMatches[finalMatchIndex]
+            try {
+              parsedMatch = JSON.parse(finalMatch)
+              if (parsedMatch.args && parsedMatch.args.player_response) {
+                playerResponse = JSON.parse(parsedMatch.args.player_response)
+                break
+              }
+            } catch (err) {
+              console.log(err)
+              continue
+            }
           }
         }
+      }
+      
+      if (!playerResponse) {
+        reject(new errors.YTScraperMissingData)
+        return
+      }
+
+      function parseScrapedCount(count) {
+        const parsed = parseInt(count.toLowerCase().replace(/k/g, "000").replace(/m/g, "000000").replace(/b/g, "000000000").replace(/,/g, ""))
+        return parsed == NaN ? undefined : parsed
+      }
+
+      function parseScrapedDate(dateString) {
+        if (!dateString) {
+          return undefined
+        }
+
+        const parsed = new Date(dateString)
+        if (parsed == "Invalid Date") {
+          return undefined
+        }
+
+        return parsed
+      }
+
+      function parseScrapedInt(intString) {
+        if (!intString) {
+          return undefined
+        }
+
+        const parsed = parseInt(intString)
+        return parsed == NaN ? undefined : parsed
+      }
+
+      let likes = $.find(".like-button-renderer-like-button .yt-uix-button-content").first().text()
+      likes = parseScrapedCount(likes)
+      let dislikes = $.find(".like-button-renderer-dislike-button .yt-uix-button-content").first().text()
+      dislikes = parseScrapedCount(dislikes)
+
+      const videoDetails = playerResponse.videoDetails
+      if (!videoDetails) {
+        reject(new errors.YTScraperMissingData)
+        return
+      }
+
+      if (!playerResponse.microformat || !playerResponse.microformat.playerMicroformatRenderer) {
+        reject(new errors.YTScraperMissingData)
+        return
+      }
+      const microformatDetails = playerResponse.microformat.playerMicroformatRenderer
+
+      resolve({
+        id: videoDetails.videoId,
+        title: videoDetails.title,
+        views: parseScrapedInt(videoDetails.viewCount),
+        description: microformatDetails.description ? microformatDetails.description.simpleText : undefined,
+        category: microformatDetails.category,
+        length: parseScrapedInt(microformatDetails.lengthSeconds),
+        thumbnails: microformatDetails.thumbnail ? microformatDetails.thumbnail.thumbnails : undefined,
+        live: videoDetails.isLiveContent,
+
+        rating: {
+          average: videoDetails.averageRating,
+          allowed: videoDetails.allowRatings,
+          approx: {
+            likes: likes,
+            dislikes: dislikes
+          }
+        },
+        privacy: {
+          private: videoDetails.isPrivate,
+          unlisted: microformatDetails.isUnlisted,
+          familySafe: microformatDetails.isFamilySafe,
+          availableCountries: microformatDetails.availableCountries
+        },
+        dates: {
+          published: parseScrapedDate(microformatDetails.publishDate),
+          uploaded: parseScrapedDate(microformatDetails.uploadDate)
+        }
+        
       })
 
-      // If the loop found a valid video id
-      if (videoId) {
-        // Generate a fresh/clean url
-        var generatedVideoUrl = "https://www.youtube.com/watch?v=" + videoId
-        // Pull the source code
-        request(generatedVideoUrl, {
-          headers: globalVariables.globalHeaders
-        })
-        .then(body => {
-          // Load into cheerio
-          var $ = cheerio.load(body)
-
-          // Getting all of the info
-          var title = $("#eow-title").text()
-          title = title.trim()
-
-          var views = $("#watch7-views-info .watch-view-count").text()
-          views = views.replace(/( |views|,)/g, "")
-
-          var description = $("#eow-description").text()
-
-          var likes = $(".like-button-renderer-like-button .yt-uix-button-content").first().text()
-
-          var dislikes = $(".like-button-renderer-dislike-button .yt-uix-button-content").first().text()
-
-          var uploadDate = $("#watch-uploader-info .watch-time-text").text().replace("Published on", "").trim()
-
-          var channelName = $(".yt-user-info a").text()
-
-          var channelUrl = $(".yt-user-info a").attr("href")
-          var channelId = channelUrl.replace(/\/(user|channel)\//g, "")
-          channelUrl = "https://www.youtube.com" + channelUrl
-
-          // Final construction of data
-          var data = {
-            title: title,
-            id: videoId,
-            views: parseInt(views),
-            description: description,
-            likes: parseInt(likes),
-            dislikes: parseInt(dislikes),
-            uploadDate: new Date(uploadDate)
-          }
-
-          if (!minimalChannelInfo) {
-            // Pull channel info to add the data object
-            channel.info(channelUrl)
-            .then(channelData => {
-              // Add all channel info to data object
-              data.channel = channelData
-              // Return data
-              resolve(data)
-            })
-            .catch(reject)
-          } else {
-            data.channel = {
-              id: channelId,
-              name: channelName,
-              url: channelUrl
-            }
-            resolve(data)
-          }
-        })
-        .catch(reject)
-      } else reject("Invalid video ID")
-    } else reject("Invalid video URL")
+    })
   })
 }
 
