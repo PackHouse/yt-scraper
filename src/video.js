@@ -1,99 +1,197 @@
 const url = require("url")
 const cheerio = require("cheerio")
-const request = require("request-promise-native")
+const request = require("request")
 
 const globalVariables = require("./variables")
+const errors = require("./errors")
 const channel = require("./channel")
+const parser = require("./parser")
 
-function videoInfo(videoUrl, minimalChannelInfo) {
+function videoInfo(videoUrl, options = { detailedChannelData: true }) {
   return new Promise((resolve, reject) => {
-    // Parse the given url for processing
-    var parsedUrl = url.parse(videoUrl)
+    const videoIdRegex = /^[0-9A-Za-z_-]{10,}[048AEIMQUYcgkosw]$/g
+    let videoId
 
-    // Regex for video id used a little later, 10+ characters for future proofing
-    var videoIdRegex = /^[0-9A-Za-z_-]{10,}[048AEIMQUYcgkosw]$/g
-    if (globalVariables.hostnameRegex.test(parsedUrl.hostname)) {
-      // Start a loop to find the "v" query and value
-      var videoId = undefined
-      // Split the queries and loop through them
-      parsedUrl.query.split("&").forEach(query => {
-        // Split each query key and value
-        var splitQuery = query.split("=")
-        // If the key is "v"...
-        if (splitQuery[0] == "v") {
-          // Verify it's a valid id
-          if (videoIdRegex.test(splitQuery[1])) {
-            videoId = splitQuery[1]
+    if (videoIdRegex.test(videoUrl)) {
+      videoId = videoUrl
+    } else {
+      const httpRegex = /^(http|https):\/\//g
+      if (!httpRegex.test(videoUrl)) {
+        videoUrl = "https://" + videoUrl
+      }
+
+      const parsedUrl = url.parse(videoUrl)
+
+      if (/^(www.)?youtube.com/g.test(parsedUrl.hostname)) {
+        const urlQueries = {}
+        parsedUrl.query.split("&").forEach(query => {
+          const split = query.split("=")
+          urlQueries[split[0]] = split[1]
+        })
+
+        if (!urlQueries.v) {
+          reject(new errors.YTScraperInvalidVideoURL)
+          return
+        }
+
+        if (!videoIdRegex.test(urlQueries.v)) {
+          if (!options.bypassIdCheck) {
+            reject(new errors.YTScraperInvalidVideoID)
+            return
           }
         }
-      })
 
-      // If the loop found a valid video id
-      if (videoId) {
-        // Generate a fresh/clean url
-        var generatedVideoUrl = "https://www.youtube.com/watch?v=" + videoId
-        // Pull the source code
-        request(generatedVideoUrl, {
-          headers: globalVariables.globalHeaders
-        })
-        .then(body => {
-          // Load into cheerio
-          var $ = cheerio.load(body)
+        videoId = urlQueries.v
+      } else if (/^youtu.be/g.test(parsedUrl.hostname)) {
+        const pathnameId = parsedUrl.pathname.slice(1,)
 
-          // Getting all of the info
-          var title = $("#eow-title").text()
-          title = title.trim()
+        if (pathnameId.length <= 0) {
+          reject(new errors.YTScraperInvalidVideoURL)
+          return
+        }
 
-          var views = $("#watch7-views-info .watch-view-count").text()
-          views = views.replace(/( |views|,)/g, "")
-
-          var description = $("#eow-description").text()
-
-          var likes = $(".like-button-renderer-like-button .yt-uix-button-content").first().text()
-
-          var dislikes = $(".like-button-renderer-dislike-button .yt-uix-button-content").first().text()
-
-          var uploadDate = $("#watch-uploader-info .watch-time-text").text().replace("Published on", "").trim()
-
-          var channelName = $(".yt-user-info a").text()
-
-          var channelUrl = $(".yt-user-info a").attr("href")
-          var channelId = channelUrl.replace(/\/(user|channel)\//g, "")
-          channelUrl = "https://www.youtube.com" + channelUrl
-
-          // Final construction of data
-          var data = {
-            title: title,
-            id: videoId,
-            views: parseInt(views),
-            description: description,
-            likes: parseInt(likes),
-            dislikes: parseInt(dislikes),
-            uploadDate: new Date(uploadDate)
+        if (!videoIdRegex.test(pathnameId)) {
+          if (!options.bypassIdCheck) {
+            reject(new errors.YTScraperInvalidVideoID)
+            return
           }
+        }
 
-          if (!minimalChannelInfo) {
-            // Pull channel info to add the data object
-            channel.info(channelUrl)
-            .then(channelData => {
-              // Add all channel info to data object
-              data.channel = channelData
-              // Return data
-              resolve(data)
-            })
-            .catch(reject)
-          } else {
-            data.channel = {
-              id: channelId,
-              name: channelName,
-              url: channelUrl
-            }
-            resolve(data)
+        videoId = pathnameId
+      } else {
+        reject(new errors.YTScraperInvalidVideoURL)
+        return
+      }
+    }
+
+    const ytUrl = `https://www.youtube.com/watch?v=${videoId}&gl=US&hl=en&has_verified=1&bpctr=9999999999`
+    request({
+      url: ytUrl,
+      headers: globalVariables.headers
+    }, async (err, res, body) => {
+      if (err) {
+        reject(err)
+        return
+      }
+
+      if (!body) {
+        reject(new errors.YTScraperMissingData)
+        return
+      }
+
+      var parsedBody
+      try {
+        parsedBody = await parser.parse(body)
+      } catch (err) {
+        reject(err)
+        return
+      }
+
+      if (!parsedBody.match.args || !parsedBody.match.args.player_response) {
+        reject(new errors.YTScraperMissingData)
+        return
+      }
+
+      let playerResponse
+      try {
+        playerResponse = JSON.parse(parsedBody.match.args.player_response)
+      } catch (err) {
+        reject(new errors.YTScraperMissingData)
+        return
+      }
+       
+      function parseScrapedCount(count) {
+        const parsed = parseInt(count.toLowerCase().replace(/k/g, "000").replace(/m/g, "000000").replace(/b/g, "000000000").replace(/,/g, ""))
+        return parsed == NaN ? undefined : parsed
+      }
+
+      function parseScrapedDate(dateString) {
+        if (!dateString) {
+          return undefined
+        }
+
+        const parsed = new Date(dateString)
+        if (parsed == "Invalid Date") {
+          return undefined
+        }
+
+        return parsed
+      }
+
+      function parseScrapedInt(intString) {
+        if (!intString) {
+          return undefined
+        }
+
+        const parsed = parseInt(intString)
+        return parsed == NaN ? undefined : parsed
+      }
+
+      let likes = parsedBody.dom.find(".like-button-renderer-like-button .yt-uix-button-content").first().text()
+      likes = parseScrapedCount(likes)
+      let dislikes = parsedBody.dom.find(".like-button-renderer-dislike-button .yt-uix-button-content").first().text()
+      dislikes = parseScrapedCount(dislikes)
+
+      const videoDetails = playerResponse.videoDetails
+      if (!videoDetails) {
+        reject(new errors.YTScraperMissingData)
+        return
+      }
+
+
+      if (!playerResponse.microformat || !playerResponse.microformat.playerMicroformatRenderer) {
+        reject(new errors.YTScraperMissingData)
+        return
+      }
+      const microformatDetails = playerResponse.microformat.playerMicroformatRenderer
+
+      let data = {
+        id: videoDetails.videoId,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        title: videoDetails.title,
+        views: parseScrapedInt(videoDetails.viewCount),
+        description: microformatDetails.description ? microformatDetails.description.simpleText : undefined,
+        category: microformatDetails.category,
+        length: parseScrapedInt(microformatDetails.lengthSeconds),
+        thumbnails: microformatDetails.thumbnail ? microformatDetails.thumbnail.thumbnails : undefined,
+        live: videoDetails.isLiveContent,
+
+        rating: {
+          average: videoDetails.averageRating,
+          allowed: videoDetails.allowRatings,
+          approx: {
+            likes: likes,
+            dislikes: dislikes
           }
-        })
-        .catch(reject)
-      } else reject("Invalid video ID")
-    } else reject("Invalid video URL")
+        },
+        privacy: {
+          private: videoDetails.isPrivate,
+          unlisted: microformatDetails.isUnlisted,
+          familySafe: microformatDetails.isFamilySafe,
+          availableCountries: microformatDetails.availableCountries
+        },
+        dates: {
+          published: parseScrapedDate(microformatDetails.publishDate),
+          uploaded: parseScrapedDate(microformatDetails.uploadDate)
+        }
+        
+      }
+
+      if (options.detailedChannelData) {
+        try {
+          data.channel = await channel.info(microformatDetails.ownerProfileUrl)
+          resolve(data)
+        } catch (err) {
+          reject(err)
+        }
+      } else {
+        data.channel = {
+          url: microformatDetails.ownerProfileUrl
+        }
+        resolve(data)
+      }
+
+    })
   })
 }
 

@@ -1,73 +1,113 @@
 const url = require("url")
 const cheerio = require("cheerio")
-const request = require("request-promise-native")
+const request = require("request")
 
+const errors = require("./errors")
+const parser = require("./parser")
 const globalVariables = require("./variables")
 
 function channelInfo(channelUrl) {
   return new Promise((resolve, reject) => {
-    // Parse url for processing
-    var parsedUrl = url.parse(channelUrl)
-    // Regex for checking a valid channel id
-    // youtube channel id should contains 0 & _ character.
-    var channelPathRegex = /^\/(user|channel)\/[_A-Za-z0-9-]{1,}$/g
 
-    // Checking the type of channel url, `channel` or `url`
-    var channelUrlType = "channel"
-    if (/^\/user/g.test(parsedUrl.pathname)) {
-      channelUrlType = "user"
+    let channelId
+    let channelUrlType
+
+    const httpRegex = /^(http|https):\/\//g
+    if (!httpRegex.test(channelUrl)) {
+      channelUrl = "https://" + channelUrl
     }
 
-    // If valid YouTube url
-    if (globalVariables.hostnameRegex.test(parsedUrl.hostname)) {
-      // If valid channel id
-      if (channelPathRegex.test(parsedUrl.pathname)) {
-        channelId = parsedUrl.pathname.replace(/\/(user|channel)\//g, "")
+    const parsedUrl = url.parse(channelUrl)
+    if (!/^(www.)?youtube.com/g.test(parsedUrl.hostname)) {
+      reject(new errors.YTScraperInvalidChannelURL)
+      return
+    }
 
-        // Generate a fresh/clean channel url
-        var generatedChannelUrl = "https://www.youtube.com/" + channelUrlType + "/" + channelId + "/about"
-        request(generatedChannelUrl, {
-          headers: globalVariables.globalHeaders
-        })
-        .then(body => {
-          var $ = cheerio.load(body)
+    if (!/^\/(channel|user)\/[_\-A-Za-z0-9]{1,}$/g.test(parsedUrl.pathname)) {
+      reject(new errors.YTScraperInvalidChannelURL)
+      return
+    }
 
-          // Data variable returned
-          var data = { id: channelId }
+    const channelUrlTypeMatches = parsedUrl.pathname.match(/(channel|user)/g)
+    if (channelUrlTypeMatches.legnth <= 0) {
+      reject(new errors.YTScraperInvalidChannelURL)
+      return
+    }
+    channelUrlType = channelUrlTypeMatches[0]
 
-          // Channel name
-          var name = $(".qualified-channel-title-text a").text()
-          data.name = name
+    const channelIdMatches = parsedUrl.pathname.match(/[_\-A-Za-z0-9]{1,}$/g)
+    if (channelIdMatches.length <= 0) {
+      reject(new errors.YTScraperInvalidChannelID)
+      return
+    }
 
-          // All 3 elements we need all come under about-stat class
-          $(".about-stat").each((index, element) => {
-            var elementText = $(element).text()
-            if (/subscribers/g.test(elementText)) {
-              // Subscribers
-              var subscribers = elementText.replace(/[^1-9]/g, "")
-              data.subscribers = parseInt(subscribers)
-            } else if (/views/g.test(elementText)) {
-              // Views
-              var views = elementText.replace(/[^1-9]/g, "")
-              data.views = parseInt(views)
-            } else if (/Joined/g.test(elementText)) {
-              // Joined date
-              var joined = elementText.replace(/Joined /g, "")
-              data.joined = new Date(joined)
-            }
-          })
+    channelId = channelIdMatches[0]
 
-          data.url = generatedChannelUrl
+    const ytUrl = `https://www.youtube.com/${channelUrlType}/${channelId}/about?gl=US&hl=en&has_verified=1`
+    request({
+      url: ytUrl,
+      headers: globalVariables.headers
+    }, async (err, res, body) => {
+      if (err) {
+        reject(err)
+        return
+      }
 
-          var description = $(".about-description pre").text()
-          data.description = description
+      if (!body) {
+        reject(new errors.YTScraperMissingData)
+        return
+      }
 
-          // Return the data
-          resolve(data)
-        })
-        .catch(reject)
-      } else reject("Invalid channel URL")
-    } else reject("Invalid channel URL")
+      function parseScrapedCount(count) {
+        count = count.toLowerCase()
+        console.log(count)
+        let parsedCount
+        if (/^[0-9]{1,}\.[0-9]{2}(k|m|b)?$/.test(count)) {
+          parsedCount = parseInt(count.toLowerCase().replace(/k/g, "0").replace(/m/g, "0000").replace(/k/g, "0000000").replace(/\D/g, ""))
+        } else if (/^[0-9]{1,}(k|m|b)$/.test(count)) {
+          parsedCount = parseInt(count.toLowerCase().replace(/k/g, "000").replace(/m/g, "000000").replace(/b/g, "000000000").replace(/\D/g, ""))
+        } else {
+          parsedCount = parseInt(count)
+        }
+
+        return parsedCount == NaN ? undefined : parsedCount
+      }
+
+      var $ = cheerio.load(body)
+
+      let joined = undefined
+      let approxSubscribers = undefined
+      let approxViews = undefined
+
+      // All 3 elements we need all come under about-stat class
+      $(".about-stat").each((index, element) => {
+        var elementText = $(element).text()
+        if (/views/g.test(elementText)) {
+          // Views
+          approxViews = parseScrapedCount(elementText.replace(/[^1-9]/g, ""))
+        } else if (/Joined/g.test(elementText)) {
+          // Joined date
+          let parsedDate = new Date(elementText.replace(/Joined /g, ""))
+          joined = typeof parsedDate != "object" ? undefined : parsedDate
+        }
+      })
+
+      approxSubscribers = parseScrapedCount($(".channel-header-subscription-button-container .yt-subscription-button-subscriber-count-branded-horizontal").text())
+      const description = $(".about-description pre").text()
+
+      resolve({
+        id: channelId,
+        name: $(".qualified-channel-title-text a").text(),
+        url: `https://www.youtube.com/${channelUrlType}/${channelId}`,
+        description: description.length > 0 ? description : undefined,
+        joined: joined,
+        approx: {
+          subscribers: approxSubscribers,
+          views: approxViews
+        }
+      })
+
+    })
   })
 }
 
