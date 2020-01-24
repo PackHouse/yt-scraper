@@ -35,8 +35,10 @@ function videoInfo(videoUrl, options = { detailedChannelData: true }) {
         }
 
         if (!videoIdRegex.test(urlQueries.v)) {
-          reject(new errors.YTScraperInvalidVideoID)
-          return
+          if (!options.bypassIdCheck) {
+            reject(new errors.YTScraperInvalidVideoID)
+            return
+          }
         }
 
         videoId = urlQueries.v
@@ -49,8 +51,10 @@ function videoInfo(videoUrl, options = { detailedChannelData: true }) {
         }
 
         if (!videoIdRegex.test(pathnameId)) {
-          reject(new errors.YTScraperInvalidVideoID)
-          return
+          if (!options.bypassIdCheck) {
+            reject(new errors.YTScraperInvalidVideoID)
+            return
+          }
         }
 
         videoId = pathnameId
@@ -143,6 +147,7 @@ function videoInfo(videoUrl, options = { detailedChannelData: true }) {
 
       let data = {
         id: videoDetails.videoId,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
         title: videoDetails.title,
         views: parseScrapedInt(videoDetails.viewCount),
         description: microformatDetails.description ? microformatDetails.description.simpleText : undefined,
