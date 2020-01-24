@@ -9,8 +9,6 @@ Modern YouTube scraper capable of retrieving video and channel info.
 - [x] Real error handling
 - [x] Use `ytplayer.config` for video info allowing more info
 - [x] Less strict requirements for YT video urls
-- [ ] Use `ytplayer.config` for channel info allowing more info
-- [ ] Less strict requirements for YT channel urls
 - [ ] Update tests with more info
 
 ## Install (v1)

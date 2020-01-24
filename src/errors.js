@@ -22,6 +22,14 @@ class YTScraperInvalidChannelID extends Error {
 }
 exports.YTScraperInvalidChannelID = YTScraperInvalidChannelID
 
+class YTScraperInvalidChannelURL extends Error {
+	constructor(message) {
+		super(message)
+		this.name = "YTScraperInvalidChannelURL"
+	}
+}
+exports.YTScraperInvalidVideoURL = YTScraperInvalidVideoURL
+
 class YTScraperMissingData extends Error {
 	constructor(message) {
 		super(message)
