@@ -1,13 +1,13 @@
 const url = require("url")
 const cheerio = require("cheerio")
-const request = require("request-promise-native")
+const request = require("request")
 
 const globalVariables = require("./variables")
 const errors = require("./errors")
 const channel = require("./channel")
 const parser = require("./parser")
 
-function videoInfo(videoUrl, options = {}) {
+function videoInfo(videoUrl, options = { detailedChannelData: true }) {
   return new Promise((resolve, reject) => {
     const videoIdRegex = /^[0-9A-Za-z_-]{10,}[048AEIMQUYcgkosw]$/g
     let videoId
@@ -63,7 +63,7 @@ function videoInfo(videoUrl, options = {}) {
     const ytUrl = `https://www.youtube.com/watch?v=${videoId}&gl=US&hl=en&has_verified=1&bpctr=9999999999`
     request({
       url: ytUrl,
-      headers: globalVariables.globalHeaders
+      headers: globalVariables.headers
     }, async (err, res, body) => {
       if (err) {
         reject(err)
@@ -134,13 +134,14 @@ function videoInfo(videoUrl, options = {}) {
         return
       }
 
+
       if (!playerResponse.microformat || !playerResponse.microformat.playerMicroformatRenderer) {
         reject(new errors.YTScraperMissingData)
         return
       }
       const microformatDetails = playerResponse.microformat.playerMicroformatRenderer
 
-      resolve({
+      let data = {
         id: videoDetails.videoId,
         title: videoDetails.title,
         views: parseScrapedInt(videoDetails.viewCount),
@@ -169,7 +170,21 @@ function videoInfo(videoUrl, options = {}) {
           uploaded: parseScrapedDate(microformatDetails.uploadDate)
         }
         
-      })
+      }
+
+      if (options.detailedChannelData) {
+        try {
+          data.channel = await channel.info(microformatDetails.ownerProfileUrl)
+          resolve(data)
+        } catch (err) {
+          reject(err)
+        }
+      } else {
+        data.channel = {
+          url: microformatDetails.ownerProfileUrl
+        }
+        resolve(data)
+      }
 
     })
   })

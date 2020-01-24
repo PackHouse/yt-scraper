@@ -1,6 +1,6 @@
 const url = require("url")
 const cheerio = require("cheerio")
-const request = require("request-promise-native")
+const request = require("request")
 
 const errors = require("./errors")
 const parser = require("./parser")
@@ -46,7 +46,7 @@ function channelInfo(channelUrl) {
     const ytUrl = `https://www.youtube.com/${channelUrlType}/${channelId}/about?gl=US&hl=en&has_verified=1`
     request({
       url: ytUrl,
-      headers: globalVariables.globalVariables
+      headers: globalVariables.headers
     }, async (err, res, body) => {
       if (err) {
         reject(err)
@@ -60,11 +60,14 @@ function channelInfo(channelUrl) {
 
       function parseScrapedCount(count) {
         count = count.toLowerCase()
+        console.log(count)
         let parsedCount
-        if (/^[0-9]{1,}\.[0-9]{2}(k|m|b)?$/) {
+        if (/^[0-9]{1,}\.[0-9]{2}(k|m|b)?$/.test(count)) {
           parsedCount = parseInt(count.toLowerCase().replace(/k/g, "0").replace(/m/g, "0000").replace(/k/g, "0000000").replace(/\D/g, ""))
-        } else if (/^[0-9](k|m|b)$/) {
+        } else if (/^[0-9]{1,}(k|m|b)$/.test(count)) {
           parsedCount = parseInt(count.toLowerCase().replace(/k/g, "000").replace(/m/g, "000000").replace(/b/g, "000000000").replace(/\D/g, ""))
+        } else {
+          parsedCount = parseInt(count)
         }
 
         return parsedCount == NaN ? undefined : parsedCount
@@ -96,7 +99,7 @@ function channelInfo(channelUrl) {
         id: channelId,
         name: $(".qualified-channel-title-text a").text(),
         url: `https://www.youtube.com/${channelUrlType}/${channelId}`,
-        description: description,
+        description: description.length > 0 ? description : undefined,
         joined: joined,
         approx: {
           subscribers: approxSubscribers,
