@@ -5,6 +5,7 @@ const request = require("request-promise-native")
 const globalVariables = require("./variables")
 const errors = require("./errors")
 const channel = require("./channel")
+const parser = require("./parser")
 
 function videoInfo(videoUrl, options = {}) {
   return new Promise((resolve, reject) => {
@@ -20,10 +21,6 @@ function videoInfo(videoUrl, options = {}) {
       }
 
       const parsedUrl = url.parse(videoUrl)
-      // if (!/^((www.)?youtube.com|youtu.be)$/g.test(parsedUrl.hostname)) {
-      //   reject(new errors.YTScraperInvalidVideoURL)
-      //   return
-      // }
 
       if (/^(www.)?youtube.com/g.test(parsedUrl.hostname)) {
         const urlQueries = {}
@@ -67,7 +64,7 @@ function videoInfo(videoUrl, options = {}) {
     request({
       url: ytUrl,
       headers: globalVariables.globalHeaders
-    }, (err, res, body) => {
+    }, async (err, res, body) => {
       if (err) {
         reject(err)
         return
@@ -78,38 +75,27 @@ function videoInfo(videoUrl, options = {}) {
         return
       }
 
-      const $ = cheerio(body)
-      let playerResponse
-      const scriptElements = $.find("script").toArray()
-      for (index in scriptElements) {
-        const element = scriptElements[index]
-        const text = cheerio(element).contents().first().text()
-        const configMatches = text.match(/ytplayer.config\s?=\s?\{.{0,}\};ytplayer/gm)
-        for (configMatchIndex in configMatches) {
-          const configMatch = configMatches[configMatchIndex]
-
-          const finalMatches = configMatch.match(/\{.{0,}\}/gm)
-          for (finalMatchIndex in finalMatches) {
-            const finalMatch = finalMatches[finalMatchIndex]
-            try {
-              parsedMatch = JSON.parse(finalMatch)
-              if (parsedMatch.args && parsedMatch.args.player_response) {
-                playerResponse = JSON.parse(parsedMatch.args.player_response)
-                break
-              }
-            } catch (err) {
-              console.log(err)
-              continue
-            }
-          }
-        }
+      var parsedBody
+      try {
+        parsedBody = await parser.parse(body)
+      } catch (err) {
+        reject(err)
+        return
       }
-      
-      if (!playerResponse) {
+
+      if (!parsedBody.match.args || !parsedBody.match.args.player_response) {
         reject(new errors.YTScraperMissingData)
         return
       }
 
+      let playerResponse
+      try {
+        playerResponse = JSON.parse(parsedBody.match.args.player_response)
+      } catch (err) {
+        reject(new errors.YTScraperMissingData)
+        return
+      }
+       
       function parseScrapedCount(count) {
         const parsed = parseInt(count.toLowerCase().replace(/k/g, "000").replace(/m/g, "000000").replace(/b/g, "000000000").replace(/,/g, ""))
         return parsed == NaN ? undefined : parsed
@@ -137,9 +123,9 @@ function videoInfo(videoUrl, options = {}) {
         return parsed == NaN ? undefined : parsed
       }
 
-      let likes = $.find(".like-button-renderer-like-button .yt-uix-button-content").first().text()
+      let likes = parsedBody.dom.find(".like-button-renderer-like-button .yt-uix-button-content").first().text()
       likes = parseScrapedCount(likes)
-      let dislikes = $.find(".like-button-renderer-dislike-button .yt-uix-button-content").first().text()
+      let dislikes = parsedBody.dom.find(".like-button-renderer-dislike-button .yt-uix-button-content").first().text()
       dislikes = parseScrapedCount(dislikes)
 
       const videoDetails = playerResponse.videoDetails
