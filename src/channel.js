@@ -60,7 +60,6 @@ function channelInfo(channelUrl) {
 
       function parseScrapedCount(count) {
         count = count.toLowerCase()
-        console.log(count)
         let parsedCount
         if (/^[0-9]{1,}\.[0-9]{2}(k|m|b)?$/.test(count)) {
           parsedCount = parseInt(count.toLowerCase().replace(/k/g, "0").replace(/m/g, "0000").replace(/k/g, "0000000").replace(/\D/g, ""))
