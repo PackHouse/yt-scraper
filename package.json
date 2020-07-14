@@ -1,10 +1,9 @@
 {
   "name": "yt-scraper",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Modern YouTube scraper capable of retrieving video and channel info",
   "main": "index.js",
-  "scripts": {
-  },
+  "scripts": {},
   "keywords": [
     "youtube",
     "scraper",
@@ -23,8 +22,7 @@
     "url": "git://github.com/harrego/yt-scraper.git"
   },
   "dependencies": {
-    "cheerio": "^1.0.0-rc.3",
-    "request": "^2.88.0"
+    "bent": "^7.3.7"
   },
   "devDependencies": {}
 }
