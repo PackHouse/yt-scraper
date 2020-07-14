@@ -11,7 +11,8 @@ function videoInfo(videoUrl, givenOptions = {}) {
 
     const options = {
       detailedChannelData: givenOptions.detailedChannelData != undefined ? givenOptions.detailedChannelData : true,
-      includeRawData: givenOptions.includeRawData != undefined ? givenOptions.includeRawData : false
+      includeRawData: givenOptions.includeRawData != undefined ? givenOptions.includeRawData : false,
+      bypassIdCheck: givenOptions.bypassIdCheck != undefined ? givenOptions.bypassIdCheck : false
     }
 
     const videoIdRegex = /^[0-9A-Za-z_-]{10,}[048AEIMQUYcgkosw]$/g

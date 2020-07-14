@@ -129,7 +129,7 @@ function channelInfo(channelUrl, givenOptions = {}) {
         name: extractedPageData.metadata.channelMetadataRenderer.title,
         description: description,
         location: (aboutData.country || {}).simpleText,
-        joinedDate: new Date(aboutData.joinedDateText.runs[1].text),
+        joined: new Date(aboutData.joinedDateText.runs[1].text),
         keywords: extractedPageData.microformat.microformatDataRenderer.tags || [],
         approx: {
           views: views,
