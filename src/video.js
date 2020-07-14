@@ -143,7 +143,7 @@ function videoInfo(videoUrl, givenOptions = {}) {
     }
 
     let likes = undefined
-    let disliked = undefined
+    let dislikes = undefined
 
     const menuButtons = extractedPageData.contents.twoColumnWatchNextResults.results.results.contents[0].videoPrimaryInfoRenderer.videoActions.menuRenderer.topLevelButtons
     const likeButtons = menuButtons.filter(button => {
@@ -159,11 +159,16 @@ function videoInfo(videoUrl, givenOptions = {}) {
       return button.toggleButtonRenderer.defaultIcon.iconType == "DISLIKE"
     })
 
+    // videos with likes disabled
     if (likeButtons.length >= 1) {
-      likes = parseScrapedLikeCount(likeButtons[0].toggleButtonRenderer.defaultText.accessibility.accessibilityData.label)
+      try {
+        likes = parseScrapedLikeCount(likeButtons[0].toggleButtonRenderer.defaultText.accessibility.accessibilityData.label)
+      } catch (err) {}
     }
     if (dislikeButtons.length >= 1) {
-      dislikes = parseScrapedLikeCount(dislikeButtons[0].toggleButtonRenderer.defaultText.accessibility.accessibilityData.label)
+      try {
+        dislikes = parseScrapedLikeCount(dislikeButtons[0].toggleButtonRenderer.defaultText.accessibility.accessibilityData.label)
+      } catch (err) { }
     }
 
     const videoDetails = playerResponse.videoDetails
