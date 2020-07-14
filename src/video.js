@@ -1,6 +1,5 @@
 const url = require("url")
 const request = require("request")
-const cheerio = require("cheerio")
 
 const globalVariables = require("./variables")
 const errors = require("./errors")
@@ -85,22 +84,24 @@ function videoInfo(videoUrl, givenOptions = {}) {
         return
       }
 
-      var parsedBody
+      var extractedPageData
+      var extractedPlayerData
       try {
-        parsedBody = await parser.parse(body, /ytplayer.config\s?=\s?\{.{0,}\};ytplayer/gm)
+        extractedPageData = await parser.parse(body, /window\["ytInitialData"\]\s?=\s?{.{0,}}/gm)
+        extractedPlayerData = await parser.parse(body, /ytplayer.config\s?=\s?\{.{0,}\};ytplayer/gm)
       } catch (err) {
         reject(err)
         return
       }
 
-      if (!parsedBody.args || !parsedBody.args.player_response) {
+      if (!extractedPlayerData.args || !extractedPlayerData.args.player_response) {
         reject(new errors.YTScraperMissingData)
         return
       }
 
       let playerResponse
       try {
-        playerResponse = JSON.parse(parsedBody.args.player_response)
+        playerResponse = JSON.parse(extractedPlayerData.args.player_response)
       } catch (err) {
         reject(new errors.YTScraperMissingData)
         return
@@ -124,6 +125,11 @@ function videoInfo(videoUrl, givenOptions = {}) {
         return parsed
       }
 
+      function parseScrapedLikeCount(count) {
+        const parsed = parseInt(count.replace(/[^0-9]/g, ""))
+        return parsed == NaN ? undefined : parsed
+      }
+
       function parseScrapedInt(intString) {
         if (!intString) {
           return undefined
@@ -133,12 +139,29 @@ function videoInfo(videoUrl, givenOptions = {}) {
         return parsed == NaN ? undefined : parsed
       }
 
-      const $ = cheerio(body)
+      let likes = undefined
+      let disliked = undefined
 
-      let likes = $.find(".like-button-renderer-like-button .yt-uix-button-content").first().text()
-      likes = parseScrapedCount(likes)
-      let dislikes = $.find(".like-button-renderer-dislike-button .yt-uix-button-content").first().text()
-      dislikes = parseScrapedCount(dislikes)
+      const menuButtons = extractedPageData.contents.twoColumnWatchNextResults.results.results.contents[0].videoPrimaryInfoRenderer.videoActions.menuRenderer.topLevelButtons
+      const likeButtons = menuButtons.filter(button => {
+        if (!button.toggleButtonRenderer) {
+          return false
+        }
+        return button.toggleButtonRenderer.defaultIcon.iconType == "LIKE"
+      })
+      const dislikeButtons = menuButtons.filter(button => {
+        if (!button.toggleButtonRenderer) {
+          return false
+        }
+        return button.toggleButtonRenderer.defaultIcon.iconType == "DISLIKE"
+      })
+
+      if (likeButtons.length >= 1) {
+        likes = parseScrapedLikeCount(likeButtons[0].toggleButtonRenderer.defaultText.accessibility.accessibilityData.label)
+      }
+      if (dislikeButtons.length >= 1) {
+        dislikes = parseScrapedLikeCount(dislikeButtons[0].toggleButtonRenderer.defaultText.accessibility.accessibilityData.label)
+      }
 
       const videoDetails = playerResponse.videoDetails
       if (!videoDetails) {
@@ -196,7 +219,7 @@ function videoInfo(videoUrl, givenOptions = {}) {
       }
 
       if (options.includeRawData) {
-        data.raw = microformatDetails
+        data.raw = { page: extractedPageData, player: playerResponse }
       }
 
       resolve(data)
