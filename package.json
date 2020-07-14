@@ -22,7 +22,7 @@
     "url": "git://github.com/harrego/yt-scraper.git"
   },
   "dependencies": {
-    "request": "^2.88.0"
+    "bent": "^7.3.7"
   },
   "devDependencies": {}
 }
