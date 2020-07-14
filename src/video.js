@@ -1,14 +1,20 @@
 const url = require("url")
-const cheerio = require("cheerio")
 const request = require("request")
+const cheerio = require("cheerio")
 
 const globalVariables = require("./variables")
 const errors = require("./errors")
 const channel = require("./channel")
 const parser = require("./parser")
 
-function videoInfo(videoUrl, options = { detailedChannelData: true }) {
+function videoInfo(videoUrl, givenOptions = {}) {
   return new Promise((resolve, reject) => {
+
+    const options = {
+      detailedChannelData: givenOptions.detailedChannelData != undefined ? givenOptions.detailedChannelData : true,
+      includeRawData: givenOptions.includeRawData != undefined ? givenOptions.includeRawData : false
+    }
+
     const videoIdRegex = /^[0-9A-Za-z_-]{10,}[048AEIMQUYcgkosw]$/g
     let videoId
 
@@ -81,20 +87,20 @@ function videoInfo(videoUrl, options = { detailedChannelData: true }) {
 
       var parsedBody
       try {
-        parsedBody = await parser.parse(body)
+        parsedBody = await parser.parse(body, /ytplayer.config\s?=\s?\{.{0,}\};ytplayer/gm)
       } catch (err) {
         reject(err)
         return
       }
 
-      if (!parsedBody.match.args || !parsedBody.match.args.player_response) {
+      if (!parsedBody.args || !parsedBody.args.player_response) {
         reject(new errors.YTScraperMissingData)
         return
       }
 
       let playerResponse
       try {
-        playerResponse = JSON.parse(parsedBody.match.args.player_response)
+        playerResponse = JSON.parse(parsedBody.args.player_response)
       } catch (err) {
         reject(new errors.YTScraperMissingData)
         return
@@ -127,9 +133,11 @@ function videoInfo(videoUrl, options = { detailedChannelData: true }) {
         return parsed == NaN ? undefined : parsed
       }
 
-      let likes = parsedBody.dom.find(".like-button-renderer-like-button .yt-uix-button-content").first().text()
+      const $ = cheerio(body)
+
+      let likes = $.find(".like-button-renderer-like-button .yt-uix-button-content").first().text()
       likes = parseScrapedCount(likes)
-      let dislikes = parsedBody.dom.find(".like-button-renderer-dislike-button .yt-uix-button-content").first().text()
+      let dislikes = $.find(".like-button-renderer-dislike-button .yt-uix-button-content").first().text()
       dislikes = parseScrapedCount(dislikes)
 
       const videoDetails = playerResponse.videoDetails
@@ -145,7 +153,7 @@ function videoInfo(videoUrl, options = { detailedChannelData: true }) {
       }
       const microformatDetails = playerResponse.microformat.playerMicroformatRenderer
 
-      let data = {
+      var data = {
         id: videoDetails.videoId,
         url: `https://www.youtube.com/watch?v=${videoId}`,
         title: videoDetails.title,
@@ -179,17 +187,19 @@ function videoInfo(videoUrl, options = { detailedChannelData: true }) {
 
       if (options.detailedChannelData) {
         try {
-          data.channel = await channel.info(microformatDetails.ownerProfileUrl)
-          resolve(data)
+          data.channel = await channel.info(microformatDetails.ownerProfileUrl, options)
         } catch (err) {
           reject(err)
         }
       } else {
-        data.channel = {
-          url: microformatDetails.ownerProfileUrl
-        }
-        resolve(data)
+        data.channel = {}
       }
+
+      if (options.includeRawData) {
+        data.raw = microformatDetails
+      }
+
+      resolve(data)
 
     })
   })
