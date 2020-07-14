@@ -37,7 +37,7 @@ A promise will be returned, the resolved promise returns the object described in
 |description|String|Description of the video, will contain `\n`.|
 |category|String|Category of the video.|
 |length|Number|Length of the video in seconds.|
-|thumbnails|Array<thumbnail>|Array of thumbnails, most likely contains at least one. Documentation can be found below.|
+|thumbnails|Array\<Thumbnail\>|Array of thumbnails, most likely contains at least one. Documentation can be found below.|
 |live|Bool|Is video a live stream|
 |rating.average|Number|YouTube provided average rating. Note that it is optional as rating can be disallowed.|
 |rating.allowed|Number|Is rating allowed.|
@@ -46,7 +46,7 @@ A promise will be returned, the resolved promise returns the object described in
 |privacy.private|Bool|Is video private.|
 |privacy.unlisted|Bool|Is video unlisted.|
 |privacy.familySafe|Bool|Is video family safe (deemed by YouTube).|
-|privacy.availableCountries|Array<String>|Array of two letter capitalized country coded where video can be viewed (e.g. `US`). Note it can contain 150+ items.|
+|privacy.availableCountries|Array\<String\>|Array of two letter capitalized country coded where video can be viewed (e.g. `US`). Note it can contain 150+ items.|
 |dates.published|Date|Video published video. May vary from upload date.|
 |dates.uploaded|Date|Video uploaded date. May vary from publish date.|
 |channel|**Channel** object|Another request will be made, this can be prevented by providing `{ detailedChannelData: false }` option as the second argument. Channel object documentation can be found below.|
@@ -70,13 +70,13 @@ A promise will be returned, the resolved promise returns the object described in
 |description|String|Description of the channel. Can be optional is none is given.|
 |location|String|Country that the channel is based. Can be optional is channel doesn't set info.|
 |joined|Date|Creation date of channel|
-|keywords|Array<string>|Array of keywords set by the channel.|
+|keywords|Array\<String\>|Array of keywords set by the channel.|
 |approx.views|Number|Number of channel total views. Note that the page does not provide live numbers and may be outdated by a few hours.|
 |approx.subscribers|Number|Number of channel subscribers. Note that the page does not provide detailed numbers and therefore will be rounded numbers (e.g. `728000`).|
-|images.avatar|Array<thumbnail>|Avatar for the channel provided in different sizes. Thumbnail documentation found below.|
-|images.banner|Array<thumbnail>|Banner art for the channel provided in different sizes. Can be `undefined` is none is provided.|
+|images.avatar|Array\<Thumbnail\>|Avatar for the channel provided in different sizes. Thumbnail documentation found below.|
+|images.banner|Array\<Thumbnail\>|Banner art for the channel provided in different sizes. Can be `undefined` is none is provided.|
 |privacy.familySafe|Bool|Is video family safe (deemed by YouTube).|
-|privacy.availableCountries|Array<String>|Array of two letter capitalized country coded where video can be viewed (e.g. `US`). Note it can contain 150+ items.|
+|privacy.availableCountries|Array\<String\>|Array of two letter capitalized country coded where video can be viewed (e.g. `US`). Note it can contain 150+ items.|
 
 ### Thumbnail
 
